@@ -20,6 +20,17 @@ const registerUser = asyncHandler(async (req, res)=>{
     if([username, email, password].some(e=>e?.trim() === "")){
         throw new ApiError(404, "All feilds are required")
     }
+
+    const userCount = await User.countDocuments();
+
+    let role = "user"
+
+    if(userCount === 0){
+        role = "admin"
+    }
+
+    console.log(userCount)
+    
     const existedUser = await User.findOne({
         $or : [{email}, {username}]
     })
@@ -33,6 +44,7 @@ const registerUser = asyncHandler(async (req, res)=>{
         userName : username,
         email,
         password,
+        role : role
     })
 
     const RegisterUser = await User.findById(user._id).select('-password -refreshToken')
@@ -119,7 +131,7 @@ const logoutUser = asyncHandler(async (req, res)=>{
 const changePassword = asyncHandler(async (req, res)=>{
     const {oldPassword, newPassword} = req.body
 
-    if(!oldPassword && !newPassword){
+    if(!oldPassword || !newPassword){
         throw new ApiError(404, "all feilds are required")
     }
 
@@ -155,7 +167,7 @@ const changeUserDetails = asyncHandler(async(req, res)=>{
         req.user?._id,
         {
             $set : {
-                userName : username,
+                userName : username?.toLowerCase().trim(),
                 email
             }
         },
@@ -174,4 +186,38 @@ const getCurrentUser =  asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, user, "fetch user successfully"))
 })
 
-export {registerUser, loginUser, logoutUser, changePassword, changeUserDetails, getCurrentUser}
+
+const assignRole = asyncHandler(async (req, res) => {
+
+    const { userId } = req.params;
+    const { role } = req.body;
+
+    if (!userId || !role) {
+        throw new ApiError(404, "All fields are required");
+    }
+
+    const user = await User.findById(userId).select("-password -refreshToken");
+    if (!user) {
+        throw new ApiError(404, "User not found");
+    }   
+
+    user.role = role;
+    await user.save({ validateBeforeSave: true });
+
+    return res.status(201).json(new ApiResponse(200, user, "User role updated successfully"));
+
+})
+
+const deleteUser = asyncHandler(async(req, res)=>{
+    const {userId} = req.params
+    if(!userId){
+        throw new ApiError(404, "userId is required")
+    }
+
+    await User.findByIdAndDelete(userId)
+
+    return res.status(200)
+    .json(new ApiResponse(200, {}, "user deleted successfuly"))
+})
+
+export {registerUser, loginUser, logoutUser, changePassword, changeUserDetails, getCurrentUser, assignRole, deleteUser}
